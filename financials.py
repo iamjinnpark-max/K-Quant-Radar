@@ -1,7 +1,7 @@
 import os
 import pandas as pd
-import OpenDartReader
-
+from dotenv import load_dotenv
+load_dotenv()
 
 def get_dart_api_key():
     api_key = os.getenv("DART_API_KEY")
@@ -49,6 +49,7 @@ def load_financials(ticker: str, start_date: str, end_date: str) -> pd.DataFrame
         return pd.DataFrame()
 
     try:
+        import OpenDartReader
         dart = OpenDartReader(api_key)
     except Exception as e:
         print(
