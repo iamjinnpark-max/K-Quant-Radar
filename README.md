@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # K-Quant
 
 K-Quant is a Korean-equity recommendation platform with:
@@ -42,7 +41,18 @@ See [SECURITY.md](SECURITY.md) for secret and container security requirements.
 
 The original Streamlit application remains available as a research/admin
 interface while the Next.js platform is developed.
-=======
-# K-Quant-Radar
-K-Quant Radar is an AI-powered stock intelligence platform that combines machine learning, quantitative analysis, financial data, investor flow, and news sentiment to deliver personalized stock recommendations and institutional-grade market insights for Korean equities.
->>>>>>> d4926a14fa563e538c00dc608305caff23abba67
+
+## Streamlit Community Cloud
+
+The redesigned Streamlit interface is contained in `app.py`, with its committed
+theme in `.streamlit/config.toml`. After these files are pushed to the GitHub
+branch connected to Streamlit Community Cloud, the app rebuilds from
+`requirements.txt`.
+
+Add `DART_API_KEY` and `APP_ACCESS_PASSWORD` through the Streamlit app's
+**Settings → Secrets** panel. Never commit `.env` or `secrets.toml`.
+
+Streamlit publishes the research interface only. Cognito login, PostgreSQL user
+accounts, Stripe subscriptions, webhooks, and the owner bypass belong to the
+Next.js/FastAPI platform and require the platform deployment described in
+[PLATFORM.md](PLATFORM.md).

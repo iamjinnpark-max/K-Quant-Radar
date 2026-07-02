@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Credentials and local configuration
 .env
 .env.*
@@ -21,7 +20,6 @@ venv/
 # Local runtime data
 *.log
 docs_cache/
-=======
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -240,4 +238,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
->>>>>>> d4926a14fa563e538c00dc608305caff23abba67

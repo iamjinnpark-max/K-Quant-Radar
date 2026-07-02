@@ -24,60 +24,298 @@ from screener import run_screener, recommend_for_user
 from personalization import calculate_personalized_score
 from auth import require_access_password
 
-st.set_page_config(page_title="K-Quant Radar", layout="wide")
+st.set_page_config(
+    page_title="K-Quant | Korean Market Intelligence",
+    page_icon="🟢",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+st.markdown("""
+<style>
+    :root {
+        --kq-ink: #132019;
+        --kq-muted: #718078;
+        --kq-green: #176a49;
+        --kq-dark: #0d1d16;
+        --kq-lime: #c9f56b;
+        --kq-mint: #e1f4e9;
+        --kq-line: #dfe6e1;
+    }
+    .stApp {
+        background:
+            radial-gradient(circle at 88% 2%, rgba(201,245,107,.15), transparent 25rem),
+            #f2f5f2;
+        color: var(--kq-ink);
+    }
+    .block-container {
+        max-width: 1240px;
+        padding-top: 2.2rem;
+        padding-bottom: 5rem;
+    }
+    h1, h2, h3 {
+        letter-spacing: -.035em;
+    }
+    .kq-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+    }
+    .kq-brand {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        font-size: 1.15rem;
+        font-weight: 800;
+    }
+    .kq-logo {
+        display: grid;
+        place-items: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: .7rem;
+        color: #172017;
+        background: var(--kq-lime);
+        box-shadow: 0 8px 22px rgba(201,245,107,.22);
+    }
+    .kq-live {
+        padding: .55rem .8rem;
+        border: 1px solid var(--kq-line);
+        border-radius: 999px;
+        background: white;
+        color: var(--kq-muted);
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+    }
+    .kq-live::before {
+        content: "";
+        display: inline-block;
+        width: .45rem;
+        height: .45rem;
+        margin-right: .45rem;
+        border-radius: 50%;
+        background: #43bd78;
+        box-shadow: 0 0 0 4px rgba(67,189,120,.12);
+    }
+    .hero-card {
+        position: relative;
+        overflow: hidden;
+        min-height: 270px;
+        padding: 3.2rem;
+        border-radius: 1.5rem;
+        color: white;
+        background:
+            linear-gradient(120deg, rgba(201,245,107,.08), transparent 55%),
+            var(--kq-dark);
+        box-shadow: 0 26px 70px rgba(17,45,31,.16);
+        margin-bottom: 1.4rem;
+    }
+    .hero-card::after {
+        content: "";
+        position: absolute;
+        width: 320px;
+        height: 320px;
+        right: -90px;
+        top: -120px;
+        border: 1px solid rgba(201,245,107,.28);
+        border-radius: 50%;
+        box-shadow:
+            0 0 0 50px rgba(201,245,107,.035),
+            0 0 0 100px rgba(201,245,107,.025);
+    }
+    .hero-card small {
+        color: var(--kq-lime);
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .13em;
+    }
+    .hero-card h1 {
+        max-width: 720px;
+        margin: .8rem 0 1rem;
+        font-size: clamp(2.6rem, 6vw, 5.2rem);
+        line-height: .94;
+        letter-spacing: -.065em;
+    }
+    .hero-card p {
+        max-width: 620px;
+        margin: 0;
+        color: #aec0b7;
+        line-height: 1.6;
+    }
+    .scan-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+        margin: 2.8rem 0 1rem;
+    }
+    .scan-heading span {
+        display: inline-grid;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        margin-right: .6rem;
+        border-radius: .6rem;
+        background: var(--kq-mint);
+        color: var(--kq-green);
+        font-size: .72rem;
+        font-weight: 800;
+    }
+    .scan-heading h2 {
+        display: inline;
+        margin: 0;
+        font-size: 1.6rem;
+    }
+    .scan-heading p {
+        margin: .35rem 0 0;
+        color: var(--kq-muted);
+        font-size: .85rem;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-color: var(--kq-line);
+        border-radius: 1.25rem;
+        background: rgba(255,255,255,.94);
+        box-shadow: 0 18px 55px rgba(22,48,35,.07);
+    }
+    div[data-baseweb="select"] > div,
+    .stTextInput input {
+        min-height: 2.8rem;
+        border-color: var(--kq-line);
+        border-radius: .7rem;
+        background: #f8faf8;
+    }
+    .stButton > button {
+        min-height: 2.9rem;
+        border: 0;
+        border-radius: .7rem;
+        color: white;
+        background: var(--kq-green);
+        font-weight: 750;
+        transition: all .16s ease;
+    }
+    .stButton > button:hover {
+        color: white;
+        border: 0;
+        background: #0d422e;
+        box-shadow: 0 10px 24px rgba(23,106,73,.2);
+        transform: translateY(-1px);
+    }
+    div[data-testid="stMetric"] {
+        padding: 1rem;
+        border: 1px solid var(--kq-line);
+        border-radius: .85rem;
+        background: white;
+    }
+    .disclaimer {
+        margin: 1rem 0;
+        padding: .8rem 1rem;
+        border-left: 3px solid var(--kq-green);
+        border-radius: 0 .7rem .7rem 0;
+        color: var(--kq-muted);
+        background: rgba(255,255,255,.75);
+        font-size: .78rem;
+    }
+    .ai-box {
+        padding: 1.2rem 1.35rem;
+        border-radius: 1rem;
+        border: 1px solid #cce8d8;
+        background: var(--kq-mint);
+    }
+    @media (max-width: 700px) {
+        .block-container { padding: 1rem; }
+        .hero-card { min-height: auto; padding: 2rem 1.4rem; }
+        .hero-card h1 { font-size: 2.8rem; }
+        .kq-live { display: none; }
+    }
+</style>
+""", unsafe_allow_html=True)
+
 require_access_password()
 
-st.subheader("Personalized Stock Recommendations")
+st.markdown("""
+<div class="kq-nav">
+    <div class="kq-brand"><span class="kq-logo">KQ</span>K-Quant</div>
+    <div class="kq-live">KRX DATA LIVE</div>
+</div>
+<div class="hero-card">
+    <small>KOREAN MARKET INTELLIGENCE · SEOUL</small>
+    <h1>Find the signal.<br>Skip the noise.</h1>
+    <p>
+        Personalized KOSPI + KOSDAQ research powered by market structure,
+        fundamentals, sentiment, and machine-learning probability.
+    </p>
+</div>
+<div class="disclaimer">
+    Research signal only—not financial advice. Model probabilities are not
+    guaranteed outcomes.
+</div>
+<div class="scan-heading">
+    <div>
+        <span>01</span><h2>Build your scan</h2>
+        <p>Shape the market around your risk, style, and favorite themes.</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-market = st.selectbox(
-    "Preferred Market",
-    ["Korea", "US", "Global"]
-)
+with st.container(border=True):
+    profile_col1, profile_col2, profile_col3, profile_col4 = st.columns(4)
+    with profile_col1:
+        market = st.selectbox(
+            "Preferred Market",
+            ["Korea", "US", "Global"],
+        )
+    with profile_col2:
+        risk = st.selectbox(
+            "Risk Level",
+            ["Low", "Medium", "High"],
+            index=1,
+        )
+    with profile_col3:
+        style = st.selectbox(
+            "Investment Style",
+            ["Growth", "Value", "Dividend"],
+        )
+    with profile_col4:
+        horizon = st.selectbox(
+            "Time Horizon",
+            [
+                "0-3 Months",
+                "3-6 Months",
+                "6-12 Months",
+                "1+ Years",
+            ],
+            index=1,
+        )
 
-risk = st.selectbox(
-    "Risk Level",
-    ["Low", "Medium", "High"]
-)
-
-style = st.selectbox(
-    "Investment Style",
-    ["Growth", "Value", "Dividend"]
-)
-
-horizon = st.selectbox(
-    "Time Horizon",
-    [
-        "0-3 Months",
-        "3-6 Months",
-        "6-12 Months",
-        "1+ Years"
-    ]
-)
-
-favorite_sectors = st.multiselect(
-    "Favorite Sectors",
-    [
-        "AI",
-        "Semiconductors",
-        "EV",
-        "Biotech",
-        "Finance",
-        "Internet",
-        "Energy"
-    ]
-)
-
-scan_limit = st.slider(
-    "Number of KRX stocks to analyze",
-    min_value=10,
-    max_value=60,
-    value=30,
-    step=10,
-    help=(
-        "Candidates are selected evenly from KOSPI and KOSDAQ, "
-        "prioritizing your favorite sectors."
-    )
-)
+    theme_col, size_col = st.columns([1.5, 1])
+    with theme_col:
+        favorite_sectors = st.multiselect(
+            "Favorite Themes",
+            [
+                "AI",
+                "Semiconductors",
+                "EV",
+                "Biotech",
+                "Finance",
+                "Internet",
+                "Energy",
+            ],
+            default=["AI"],
+        )
+    with size_col:
+        scan_limit = st.slider(
+            "KRX scan size",
+            min_value=10,
+            max_value=60,
+            value=30,
+            step=10,
+            help=(
+                "Candidates are selected evenly from KOSPI and KOSDAQ, "
+                "prioritizing your favorite sectors."
+            ),
+        )
 
 user_profile = {
     "market": market,
@@ -321,8 +559,8 @@ def get_trade_action(score, probability, latest):
 # -----------------------------
 # UI
 # -----------------------------
-st.title("K-Quant Radar")
-st.caption("Korean equity quant screener: probability, momentum, volume, RSI, and risk.")
+st.markdown("## Analyze one stock")
+st.caption("Inspect probability, momentum, volume, RSI, trend, and risk in detail.")
 
 ticker = st.text_input("Enter KRX ticker", value="005930")
 
@@ -375,7 +613,12 @@ if st.button("Analyze"):
         st.caption(f"Action reason: {trade_reason}")
         st.caption(f"ADX: {latest['adx_14']:.1f} | {adx_signal}")
 
-        st.subheader("AI-Style Explanation")
+        st.markdown(f"""
+<div class="ai-box">
+    <h3>🤖 AI Explanation</h3>
+    <p>{explanation}</p>
+</div>
+""", unsafe_allow_html=True)
         st.write(explanation)
         chart_period = st.selectbox(
             "Chart period",

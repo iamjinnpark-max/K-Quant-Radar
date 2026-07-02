@@ -10,5 +10,13 @@ fileWatcherType = "none"
 maxUploadSize = 5
 maxMessageSize = 25
 
+[theme]
+base = "light"
+primaryColor = "#176A49"
+backgroundColor = "#F2F5F2"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#132019"
+font = "sans-serif"
+
 [browser]
 gatherUsageStats = false
