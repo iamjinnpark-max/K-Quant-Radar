@@ -1,0 +1,10 @@
+feedparser>=6.0,<7
+lxml>=5.0,<7
+numpy>=1.26,<3
+OpenDartReader>=0.2,<1
+pandas>=2.2,<3
+plotly>=5.20,<7
+pykrx==1.0.51
+requests>=2.31,<3
+scikit-learn>=1.4,<2
+streamlit>=1.40,<2

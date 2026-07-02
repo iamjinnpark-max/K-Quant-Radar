@@ -1,0 +1,14 @@
+[client]
+toolbarMode = "minimal"
+
+[server]
+address = "127.0.0.1"
+headless = true
+enableCORS = true
+enableXsrfProtection = true
+fileWatcherType = "none"
+maxUploadSize = 5
+maxMessageSize = 25
+
+[browser]
+gatherUsageStats = false

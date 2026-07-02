@@ -1,0 +1,197 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { authEnabled, currentSession, logout } from "@/lib/auth";
+
+type Recommendation = {
+  rank: number;
+  ticker: string;
+  company: string;
+  data: Record<string, string | number | null>;
+};
+type Job = {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  error?: string;
+  recommendations: Recommendation[];
+};
+type User = {
+  display_name?: string;
+  email?: string;
+  is_owner: boolean;
+  plan: string;
+  subscription_status: string;
+};
+
+const sectors = ["AI", "Semiconductors", "EV", "Biotech", "Finance", "Internet", "Energy"];
+
+export default function Dashboard() {
+  const [token, setToken] = useState("");
+  const [user, setUser] = useState<User | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
+  const [selected, setSelected] = useState<Recommendation | null>(null);
+  const [selections, setSelections] = useState(["AI"]);
+  const [error, setError] = useState("");
+
+  const headers = useMemo(
+    () => ({
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
+    [token],
+  );
+
+  useEffect(() => {
+    currentSession()
+      .then(async (session) => {
+        setToken(session.token);
+        const response = await fetch("/api/v1/me", {
+          headers: session.token
+            ? { Authorization: `Bearer ${session.token}` }
+            : {},
+        });
+        if (!response.ok) throw new Error("Could not load account.");
+        setUser(await response.json());
+      })
+      .catch(() => {
+        if (authEnabled) location.assign("/login");
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!job || !["queued", "running"].includes(job.status)) return;
+    const timer = window.setInterval(async () => {
+      const response = await fetch(`/api/v1/recommendation-jobs/${job.id}`, { headers });
+      if (!response.ok) return;
+      const next = await response.json();
+      setJob(next);
+      if (next.status === "completed" && next.recommendations.length) {
+        setSelected(next.recommendations[0]);
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [job, headers]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSelected(null);
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/v1/recommendation-jobs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        market: "Korea",
+        risk_level: form.get("risk"),
+        style: form.get("style"),
+        time_horizon: form.get("horizon"),
+        favorite_sectors: selections,
+        scan_limit: Number(form.get("scanLimit")),
+      }),
+    });
+    if (response.status === 402) {
+      setError("Choose a subscription to run personalized scans.");
+      return;
+    }
+    if (!response.ok) {
+      setError("Could not start the scan.");
+      return;
+    }
+    const created = await response.json();
+    setJob({ ...created, recommendations: [] });
+  }
+
+  async function billing(path: "checkout" | "portal") {
+    const response = await fetch(`/api/v1/billing/${path}`, {
+      method: "POST",
+      headers,
+    });
+    const result = await response.json();
+    if (result.url) location.assign(result.url);
+  }
+
+  return (
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand"><span>KQ</span><strong>K-Quant</strong></div>
+        <nav>
+          <a className="active">Overview</a>
+          <a>Recommendations</a>
+          <a>Watchlist</a>
+          <a>Account</a>
+        </nav>
+        <div className="account">
+          <small>{user?.is_owner ? "OWNER ACCESS" : user?.plan?.toUpperCase() ?? "ACCOUNT"}</small>
+          <strong>{user?.display_name || user?.email || "Loading…"}</strong>
+          {!user?.is_owner && (
+            <button onClick={() => billing(user?.subscription_status === "active" ? "portal" : "checkout")}>
+              {user?.subscription_status === "active" ? "Manage billing" : "Upgrade plan"}
+            </button>
+          )}
+          {authEnabled && <button onClick={() => logout()}>Sign out</button>}
+        </div>
+      </aside>
+
+      <section className="dashboard">
+        <header className="topbar">
+          <div><small>MARKET WORKSPACE</small><h1>Good signals start with context.</h1></div>
+          <div className="live"><i /> KRX DATA</div>
+        </header>
+
+        <div className="dashboard-grid">
+          <form onSubmit={submit} className="card profile-card">
+            <div className="card-head"><h2>Profile scan</h2><span>01</span></div>
+            <div className="form-grid">
+              <label>Risk<select name="risk" defaultValue="Medium"><option>Low</option><option>Medium</option><option>High</option></select></label>
+              <label>Style<select name="style"><option>Growth</option><option>Value</option><option>Dividend</option></select></label>
+              <label>Horizon<select name="horizon"><option>0-3 Months</option><option>3-6 Months</option><option>6-12 Months</option><option>1+ Years</option></select></label>
+              <label>Scan size<select name="scanLimit" defaultValue="10"><option>10</option><option>20</option><option>30</option><option>40</option><option>60</option></select></label>
+            </div>
+            <label className="theme-label">Preferred themes</label>
+            <div className="chips">{sectors.map((sector) => (
+              <button type="button" key={sector} className={selections.includes(sector) ? "chip active" : "chip"}
+                onClick={() => setSelections((items) => items.includes(sector) ? items.filter((x) => x !== sector) : [...items, sector])}>
+                {sector}
+              </button>
+            ))}</div>
+            <button className="primary">Run personalized scan</button>
+            {error && <p className="error">{error}</p>}
+          </form>
+
+          <section className="card ranking-card">
+            <div className="card-head"><h2>Ranked opportunities</h2><span>{job?.recommendations.length ?? 0}</span></div>
+            {!job && <div className="empty">Run a profile scan to begin.</div>}
+            {job && ["queued", "running"].includes(job.status) && <div className="empty pulse">{job.status === "queued" ? "Queued" : "Analyzing KOSPI + KOSDAQ"}…</div>}
+            {job?.status === "failed" && <div className="error">{job.error}</div>}
+            <div className="ranking-list">{job?.recommendations.map((item) => (
+              <button key={item.ticker} className={selected?.ticker === item.ticker ? "stock-row selected" : "stock-row"} onClick={() => setSelected(item)}>
+                <span className="rank">{item.rank}</span>
+                <span><strong>{item.company}</strong><small>{item.ticker} · {String(item.data.Market)}</small></span>
+                <span><small>Signal</small><strong>{String(item.data.Signal)}</strong></span>
+                <span className="score">{Number(item.data["Personalized Score"]).toFixed(1)}</span>
+              </button>
+            ))}</div>
+          </section>
+
+          <section className="card analysis-card">
+            <div className="card-head"><h2>Stock analysis</h2><span>03</span></div>
+            {!selected && <div className="empty">Select a recommendation to inspect its evidence.</div>}
+            {selected && (
+              <>
+                <div className="stock-title"><div><small>{selected.ticker} · {String(selected.data.Market)}</small><h3>{selected.company}</h3></div><b>{String(selected.data.Action)}</b></div>
+                <div className="metrics">
+                  <div><small>Bullish probability</small><strong>{Number(selected.data["Bullish Probability (%)"]).toFixed(1)}%</strong></div>
+                  <div><small>Alpha score</small><strong>{Number(selected.data["Alpha Score"]).toFixed(1)}</strong></div>
+                  <div><small>Model accuracy</small><strong>{Number(selected.data["Model Accuracy (%)"]).toFixed(1)}%</strong></div>
+                  <div><small>Risk</small><strong>{String(selected.data.Risk)}</strong></div>
+                </div>
+                <div className="analysis-copy"><small>MODEL-GROUNDED ANALYSIS</small><p>{String(selected.data["AI Analysis"] ?? "Analysis is unavailable for this historical result.")}</p></div>
+                <div className="disclaimer">Research signal only. Not investment advice.</div>
+              </>
+            )}
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
