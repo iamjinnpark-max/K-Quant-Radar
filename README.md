@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # K-Quant
 
 K-Quant is a Korean-equity recommendation platform with:
@@ -41,3 +42,7 @@ See [SECURITY.md](SECURITY.md) for secret and container security requirements.
 
 The original Streamlit application remains available as a research/admin
 interface while the Next.js platform is developed.
+=======
+# K-Quant-Radar
+K-Quant Radar is an AI-powered stock intelligence platform that combines machine learning, quantitative analysis, financial data, investor flow, and news sentiment to deliver personalized stock recommendations and institutional-grade market insights for Korean equities.
+>>>>>>> d4926a14fa563e538c00dc608305caff23abba67
