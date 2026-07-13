@@ -1,4 +1,6 @@
 import pandas as pd
+from datetime import datetime, timezone
+from urllib.parse import quote
 
 
 from features import add_technical_features, add_prediction_target
@@ -6,6 +8,8 @@ from investor_flow import load_investor_flow, add_investor_flow_features
 from fundamentals import load_fundamentals, add_fundamental_features
 from financials import load_financials, add_financial_features
 from news_sentiment import load_news_sentiment, add_news_features
+from regime import add_regime_features
+from options_signals import KrxIndexOptionsDataSource, add_options_features
 from model import train_prediction_model
 from utils import (
     load_price_data,
@@ -14,9 +18,16 @@ from utils import (
 from personalization import calculate_personalized_score
 from pykrx import stock
 from stock_universe import (
+    FALLBACK_UNIVERSE,
     get_full_market_universe,
     select_personalized_candidates,
 )
+# Shared across every ticker in a run: KOSPI200 options data currently has no
+# live vendor wired in, so this always reports itself unavailable and the
+# resulting iv_skew_25d/gex_proxy features stay neutral (see options_signals.py).
+_OPTIONS_DATA_SOURCE = KrxIndexOptionsDataSource()
+
+
 # --------------------------------------------------
 # Alpha Score
 # --------------------------------------------------
@@ -144,6 +155,160 @@ def _generate_stock_analysis(
     )
 
 
+def _generate_stock_analysis_ko(
+    score: dict,
+    probability: float,
+    accuracy: float,
+    latest: pd.Series,
+    stock_profile: dict,
+    momentum_score: float,
+) -> str:
+    trend = "상회" if latest["close"] > latest["ma20"] else "하회"
+    direction = (
+        "상승 우위"
+        if latest["plus_di"] > latest["minus_di"]
+        else "하락 우위"
+    )
+    risk = {
+        "Low": "낮은",
+        "Medium": "중간",
+        "High": "높은",
+    }.get(stock_profile["risk"], stock_profile["risk"])
+    signal = {
+        "Strong Buy": "강력 매수",
+        "Buy": "매수",
+        "Hold": "보유",
+        "Sell": "매도",
+    }.get(score["signal"], score["signal"])
+    return (
+        f"모델의 5거래일 상승 확률은 {probability:.1%}, 검증 구간 정확도는 "
+        f"{accuracy:.1%}입니다. 현재 주가는 20일 이동평균을 {trend}하고 있으며, "
+        f"ADX 방향성은 {direction}입니다. 모멘텀 점수는 "
+        f"{momentum_score:.0f}/100이고 관측 변동성 기준 위험도는 {risk} 수준입니다. "
+        f"종합 신호는 {signal}이지만, 이는 순위형 리서치 신호이며 수익을 "
+        f"보장하는 예측이 아닙니다."
+    )
+
+
+def _build_price_chart(df: pd.DataFrame, limit: int = 126) -> list[dict]:
+    """Serialize a compact six-month technical series for the web chart."""
+    columns = [
+        "close",
+        "ma20",
+        "ma60",
+        "bb_upper",
+        "bb_lower",
+    ]
+    chart_df = df.tail(limit)
+    points = []
+    for index, row in chart_df.iterrows():
+        point = {"date": pd.Timestamp(index).strftime("%Y-%m-%d")}
+        for column in columns:
+            value = row.get(column)
+            point[column] = (
+                round(float(value), 2)
+                if value is not None and pd.notna(value)
+                else None
+            )
+        points.append(point)
+    return points
+
+
+def _build_analysis_sources(
+    ticker: str,
+    company_name: str,
+    start_date: str,
+    end_date: str,
+    news_data: dict,
+    financials: pd.DataFrame,
+) -> list[dict]:
+    """Describe the upstream information used to build a stock analysis."""
+    accessed_at = datetime.now(timezone.utc).isoformat()
+    krx_url = "https://data.krx.co.kr/contents/MDC/MAIN/main/index.cmd"
+    sources = [
+        {
+            "name": "KRX market data",
+            "name_ko": "KRX 시장 데이터",
+            "provider": "Korea Exchange",
+            "provider_ko": "한국거래소",
+            "category": "Price, valuation, and investor flow",
+            "category_ko": "가격·밸류에이션·수급",
+            "url": krx_url,
+            "description": (
+                "Historical OHLCV, valuation fundamentals, and investor trading "
+                "flows used by the model."
+            ),
+            "description_ko": (
+                "모델에 사용된 과거 시세, 밸류에이션 지표, 투자자별 거래 흐름입니다."
+            ),
+            "as_of": end_date,
+            "period_start": start_date,
+            "accessed_at": accessed_at,
+        },
+    ]
+
+    if financials is not None and not financials.empty:
+        sources.append({
+            "name": "Corporate financial statements",
+            "name_ko": "기업 재무제표",
+            "provider": "Open DART",
+            "provider_ko": "전자공시시스템 Open DART",
+            "category": "Regulatory filings",
+            "category_ko": "공시 재무정보",
+            "url": (
+                "https://dart.fss.or.kr/dsab007/main.do"
+                f"?option=corp&keyword={quote(ticker)}"
+            ),
+            "description": (
+                "Annual financial statements used for profitability, leverage, "
+                "and cash-flow features."
+            ),
+            "description_ko": (
+                "수익성, 부채 수준, 현금흐름 분석에 사용된 연간 재무제표입니다."
+            ),
+            "as_of": end_date,
+            "accessed_at": accessed_at,
+        })
+
+    feed_url = news_data.get("feed_url")
+    if feed_url:
+        sources.append({
+            "name": f"{company_name} news search",
+            "name_ko": f"{company_name} 뉴스 검색",
+            "provider": "Google News",
+            "provider_ko": "Google 뉴스",
+            "category": "News sentiment",
+            "category_ko": "뉴스 심리",
+            "url": feed_url,
+            "description": (
+                "RSS headlines scored for the news-sentiment feature. "
+                "Individual articles used are listed below."
+            ),
+            "description_ko": (
+                "뉴스 심리 점수에 반영된 RSS 헤드라인입니다. 사용된 개별 기사는 "
+                "아래에서 확인할 수 있습니다."
+            ),
+            "accessed_at": accessed_at,
+        })
+
+    for article in news_data.get("articles", []):
+        if not article.get("url"):
+            continue
+        sources.append({
+            "name": article.get("title") or "News article",
+            "provider": article.get("publisher") or "News publisher",
+            "category": "News article",
+            "category_ko": "뉴스 기사",
+            "url": article["url"],
+            "description": "Headline included in the news-sentiment score.",
+            "description_ko": "뉴스 심리 점수에 반영된 헤드라인입니다.",
+            "published_at": article.get("published_at") or None,
+            "accessed_at": accessed_at,
+        })
+
+    return sources
+
+
 def analyze_one_stock(ticker: str, stock_meta=None):
 
     stock_meta = stock_meta or SECTOR_DB.get(ticker, {})
@@ -177,8 +342,11 @@ def analyze_one_stock(ticker: str, stock_meta=None):
     df = add_fundamental_features(df, fundamentals)
     df = add_financial_features(df, financials)
     df = add_news_features(df, news_data["news_score"])
+    df = add_regime_features(df)
+    df = add_options_features(df, _OPTIONS_DATA_SOURCE)
 
     df = add_technical_features(df)
+    chart_data = _build_price_chart(df)
     df = add_prediction_target(df)
 
     if df.empty:
@@ -215,6 +383,23 @@ def analyze_one_stock(ticker: str, stock_meta=None):
         stock_profile,
         momentum_score,
     ),
+    "AI Analysis (KO)": _generate_stock_analysis_ko(
+        score,
+        probability,
+        accuracy,
+        latest,
+        stock_profile,
+        momentum_score,
+    ),
+    "Sources": _build_analysis_sources(
+        ticker,
+        company_name,
+        start_date,
+        end_date,
+        news_data,
+        financials,
+    ),
+    "Chart Data": chart_data,
 
     "Market": stock_profile["exchange"],
     "Sector": stock_profile["sector"],
@@ -308,9 +493,10 @@ def recommend_for_user(user_profile):
         )
 
     scan_limit = user_profile.get("scan_limit", 30)
+    personalized = bool(user_profile.get("personalized", False))
     candidates = select_personalized_candidates(
         universe_df,
-        user_profile,
+        user_profile if personalized else {"favorite_sectors": []},
         limit=scan_limit,
     )
 
@@ -322,11 +508,46 @@ def recommend_for_user(user_profile):
 
     recommendation_df = run_screener(
         tickers,
-        user_profile,
+        user_profile if personalized else None,
         stock_metadata=stock_metadata,
     )
 
     return recommendation_df
+
+
+def analyze_selected_stocks(tickers, user_profile=None):
+    try:
+        universe_df = get_full_market_universe()
+    except Exception:
+        universe_df = pd.DataFrame(FALLBACK_UNIVERSE)
+    normalized = []
+    seen = set()
+    for ticker in tickers:
+        value = str(ticker).strip()
+        if not value:
+            continue
+        value = value[:-2] if value.endswith(".0") else value
+        value = value.zfill(6)
+        if value not in seen:
+            seen.add(value)
+            normalized.append(value)
+
+    if not normalized:
+        raise RuntimeError("No tickers were supplied for manual analysis.")
+
+    stock_metadata = {}
+    if not universe_df.empty and "ticker" in universe_df.columns:
+        matching = universe_df[universe_df["ticker"].isin(normalized)]
+        stock_metadata = {
+            row["ticker"]: row
+            for row in matching.to_dict("records")
+        }
+
+    return run_screener(
+        normalized,
+        user_profile,
+        stock_metadata=stock_metadata,
+    )
 
 def get_market_universe(market="KOSPI", limit=30):
     from datetime import datetime, timedelta

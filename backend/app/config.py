@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -8,7 +9,15 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     cors_origins: str = "http://localhost:3000"
     dart_api_key: str | None = None
-    auth_mode: str = "disabled"
+    # Authentication must fail closed unless local development explicitly
+    # opts into the disabled mode.
+    auth_mode: Literal["session", "cognito", "disabled"] = "session"
+    auth_cookie_secret: str | None = None
+    auth_session_cookie_name: str = "kq_session"
+    auth_csrf_cookie_name: str = "kq_csrf"
+    auth_csrf_header_name: str = "x-csrf-token"
+    auth_session_idle_ttl_seconds: int = 60 * 60 * 12
+    auth_session_absolute_ttl_seconds: int = 60 * 60 * 24 * 7
     cognito_region: str | None = None
     cognito_user_pool_id: str | None = None
     cognito_app_client_id: str | None = None

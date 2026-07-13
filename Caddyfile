@@ -9,6 +9,9 @@
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        # Streamlit relies on inline/eval scripts and a websocket for reruns,
+        # so script/style stay permissive; everything else is locked to self.
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
         -Server
     }
 }

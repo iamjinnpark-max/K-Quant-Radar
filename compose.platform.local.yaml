@@ -1,8 +1,32 @@
 services:
   api:
+    environment:
+      AUTH_MODE: session
+      AUTH_COOKIE_SECRET: ${AUTH_COOKIE_SECRET:-local-dev-cookie-secret-not-for-production}
+      CORS_ORIGINS: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000
     ports:
       - "127.0.0.1:8000:8000"
 
+  worker:
+    environment:
+      AUTH_MODE: disabled
+
+  auth:
+    environment:
+      NODE_ENV: development
+      AUTH_COOKIE_SECRET: ${AUTH_COOKIE_SECRET:-local-dev-cookie-secret-not-for-production}
+      # Local development keeps signup open and prints reset/verification
+      # tokens to the container log instead of sending email.
+      AUTH_ALLOW_SIGNUP: "true"
+      AUTH_PUBLIC_URL: http://localhost:3000
+    ports:
+      - "127.0.0.1:4000:4000"
+
   frontend:
+    build:
+      args:
+        NEXT_PUBLIC_AUTH_MODE: session
+        NEXT_PUBLIC_AUTH_REDIRECT_URL: http://localhost:3000
     ports:
       - "127.0.0.1:3000:3000"

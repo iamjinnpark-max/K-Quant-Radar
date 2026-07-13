@@ -1,6 +1,10 @@
 {$DOMAIN} {
     encode zstd gzip
 
+    handle /auth/* {
+        reverse_proxy auth:4000
+    }
+
     handle /api/* {
         reverse_proxy api:8000
     }
@@ -19,6 +23,7 @@
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://{$COGNITO_DOMAIN} wss://{$DOMAIN}; frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'"
         -Server
     }
 }

@@ -2,6 +2,7 @@ import stripe
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 
+from .audit import record_event
 from .auth import get_current_user
 from .config import get_settings
 from .database import SessionLocal
@@ -24,7 +25,7 @@ def configured_settings(*, require_price=False, require_webhook=False):
 
 
 @router.post("/checkout")
-def checkout(user: User = Depends(get_current_user)):
+def checkout(request: Request, user: User = Depends(get_current_user)):
     if user.is_owner:
         return {"url": get_settings().frontend_url}
     settings = configured_settings(require_price=True)
@@ -50,17 +51,29 @@ def checkout(user: User = Depends(get_current_user)):
         client_reference_id=user.id,
         allow_promotion_codes=True,
     )
+    record_event(
+        user_id=user.id,
+        action="billing.checkout",
+        resource_id=customer,
+        request=request,
+    )
     return {"url": checkout_session.url}
 
 
 @router.post("/portal")
-def portal(user: User = Depends(get_current_user)):
+def portal(request: Request, user: User = Depends(get_current_user)):
     settings = configured_settings()
     if not user.stripe_customer_id:
         raise HTTPException(status_code=400, detail="No billing account")
     session = stripe.billing_portal.Session.create(
         customer=user.stripe_customer_id,
         return_url=settings.frontend_url,
+    )
+    record_event(
+        user_id=user.id,
+        action="billing.portal",
+        resource_id=user.stripe_customer_id,
+        request=request,
     )
     return {"url": session.url}
 
@@ -98,4 +111,10 @@ async def webhook(
                     "trialing",
                 } else "free"
                 session.commit()
+                record_event(
+                    user_id=user.id,
+                    action="billing.subscription_updated",
+                    resource_id=customer_id,
+                    detail=f"{event['type']} -> {user.subscription_status}",
+                )
     return {"received": True}

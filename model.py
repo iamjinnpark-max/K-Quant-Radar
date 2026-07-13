@@ -52,6 +52,15 @@ FEATURE_COLUMNS = [
     "free_cash_flow",
     "financial_score",
     "news_score",
+
+    # Regime detection (see regime.py)
+    "hurst_100",
+    "sample_entropy_100",
+
+    # Options-derived (see options_signals.py; index-level KOSPI200 signal,
+    # currently 0 for every row until a real KRX adapter is wired in)
+    "iv_skew_25d",
+    "gex_proxy",
 ]
 
 

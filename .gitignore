@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 .streamlit/secrets.toml
 
 # Python
@@ -36,7 +37,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -230,6 +231,12 @@ tempCodeRunnerFile.py
 
 # PyPI configuration file
 .pypirc
+
+# Node / Next.js generated files
+node_modules/
+frontend/node_modules/
+frontend/.next/
+*.tsbuildinfo
 
 # Marimo
 marimo/_static/

@@ -1,14 +1,31 @@
 import math
+import os
+import re
 from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 
-from screener import recommend_for_user
+from screener import analyze_selected_stocks, recommend_for_user
 
 from .celery_app import celery_app
 from .database import SessionLocal
 from .models import Recommendation, RecommendationJob
+
+
+def public_error(error: Exception) -> str:
+    """Return a useful failure label without leaking credentials in URLs."""
+    message = f"{type(error).__name__}: {error}"
+    for name in ("DART_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"):
+        value = os.getenv(name)
+        if value:
+            message = message.replace(value, "[redacted]")
+    message = re.sub(
+        r"(?i)(api[_-]?key|crtfc_key|secret|token)=([^&\s]+)",
+        r"\1=[redacted]",
+        message,
+    )
+    return message[:500]
 
 
 def json_safe(value):
@@ -39,7 +56,13 @@ def run_recommendation_job(job_id: str):
         profile = job.profile
 
     try:
-        dataframe = recommend_for_user(profile)
+        if profile.get("mode") == "manual":
+            dataframe = analyze_selected_stocks(
+                profile.get("manual_tickers", []),
+                profile if profile.get("personalized", False) else None,
+            )
+        else:
+            dataframe = recommend_for_user(profile)
         rows = [
             json_safe(record)
             for record in dataframe.reset_index(drop=True).to_dict("records")
@@ -61,11 +84,12 @@ def run_recommendation_job(job_id: str):
             job.completed_at = datetime.now(timezone.utc)
             session.commit()
     except Exception as error:
+        safe_error = public_error(error)
         with SessionLocal() as session:
             job = session.get(RecommendationJob, job_id)
             if job is not None:
                 job.status = "failed"
-                job.error = f"{type(error).__name__}: {error}"[:2000]
+                job.error = safe_error
                 job.completed_at = datetime.now(timezone.utc)
                 session.commit()
-        raise
+        raise RuntimeError(safe_error) from None

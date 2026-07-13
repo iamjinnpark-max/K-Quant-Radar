@@ -39,6 +39,27 @@ def find_account(df, keywords):
     return 0
 
 
+FINANCIAL_COLUMNS = [
+    "revenue",
+    "ebitda",
+    "net_income",
+    "operating_margin",
+    "net_margin",
+    "roe",
+    "debt_ratio",
+    "free_cash_flow",
+]
+
+# Korean annual business reports (사업보고서) are due within 90 days of
+# fiscal year-end (Dec 31), so a report for fiscal year Y is treated as
+# becoming known starting April 1 of Y+1 -- a conservative approximation
+# (the exact filing date is available from DART's `rcept_no` but isn't
+# fetched here) that avoids ever applying a report's numbers to dates
+# before it was actually public.
+_ANNUAL_REPORT_EFFECTIVE_MONTH = 4
+_ANNUAL_REPORT_EFFECTIVE_DAY = 1
+
+
 def load_financials(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     api_key = get_dart_api_key()
     if not api_key:
@@ -58,8 +79,10 @@ def load_financials(ticker: str, start_date: str, end_date: str) -> pd.DataFrame
         )
         return pd.DataFrame()
 
-    current_year = pd.Timestamp.today().year
-    years = [current_year - 1, current_year - 2, current_year - 3]
+    end_year = pd.Timestamp(end_date).year
+    # A handful of years back so the point-in-time series has coverage
+    # across most of a multi-year training window, not just its tail end.
+    years = range(end_year - 4, end_year + 1)
 
     rows = []
 
@@ -85,8 +108,14 @@ def load_financials(ticker: str, start_date: str, end_date: str) -> pd.DataFrame
             debt_ratio = total_liabilities / total_equity if total_equity else 0
             free_cash_flow = cfo - capex
 
+            effective_date = pd.Timestamp(
+                year=year + 1,
+                month=_ANNUAL_REPORT_EFFECTIVE_MONTH,
+                day=_ANNUAL_REPORT_EFFECTIVE_DAY,
+            )
+
             rows.append({
-                "year": year,
+                "effective_date": effective_date,
                 "revenue": revenue,
                 "ebitda": ebitda,
                 "net_income": net_income,
@@ -103,40 +132,31 @@ def load_financials(ticker: str, start_date: str, end_date: str) -> pd.DataFrame
     if not rows:
         return pd.DataFrame()
 
-    latest = pd.DataFrame(rows).sort_values("year").iloc[-1].to_dict()
+    snapshots = (
+        pd.DataFrame(rows)
+        .sort_values("effective_date")
+        .set_index("effective_date")
+    )
 
-    result = pd.DataFrame(index=pd.date_range(start=start_date, end=end_date))
-
-    for key, value in latest.items():
-        if key != "year":
-            result[key] = value
-
-    return result
+    full_index = pd.date_range(start=start_date, end=end_date)
+    # Forward-fill each report's numbers from its effective date onward;
+    # dates before the earliest effective report stay NaN (zero-filled by
+    # add_financial_features), never pulling a later report's data backward.
+    combined_index = snapshots.index.union(full_index)
+    result = snapshots.reindex(combined_index).sort_index().ffill()
+    return result.reindex(full_index)
 
 
 def add_financial_features(price_df: pd.DataFrame, financial_df: pd.DataFrame) -> pd.DataFrame:
     df = price_df.copy()
 
-    financial_cols = [
-        "revenue",
-        "ebitda",
-        "net_income",
-        "operating_margin",
-        "net_margin",
-        "roe",
-        "debt_ratio",
-        "free_cash_flow",
-    ]
-
     if financial_df is None or financial_df.empty:
-        for col in financial_cols:
+        for col in FINANCIAL_COLUMNS:
             df[col] = 0
     else:
-        latest_fundamentals = financial_df.iloc[-1]
-        for col in financial_cols:
-            df[col] = latest_fundamentals.get(col, 0)
-        for col in ["bps", "per", "pbr", "eps", "div", "dps"]:
-            df[col] = latest_fundamentals.get(col, 0)
+        aligned = financial_df.reindex(df.index).ffill()
+        for col in FINANCIAL_COLUMNS:
+            df[col] = aligned[col] if col in aligned.columns else 0
 
     df = df.fillna(0)
 

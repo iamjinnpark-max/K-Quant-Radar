@@ -2,6 +2,8 @@ from fundamentals import load_fundamentals, add_fundamental_features
 from features import add_technical_features, add_prediction_target
 from model import train_prediction_model, FEATURE_COLUMNS
 from investor_flow import load_investor_flow, add_investor_flow_features
+from regime import add_regime_features
+from options_signals import KrxIndexOptionsDataSource, add_options_features
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -556,6 +558,9 @@ def get_trade_action(score, probability, latest):
     else:
         return "HOLD / WATCH", "Mixed signal. Wait for stronger confirmation."
 
+# No live KRX options vendor is wired in yet -- see options_signals.py.
+_OPTIONS_DATA_SOURCE = KrxIndexOptionsDataSource()
+
 # -----------------------------
 # UI
 # -----------------------------
@@ -583,6 +588,8 @@ if st.button("Analyze"):
         df = add_fundamental_features(df, fundamentals)
         df = add_financial_features(df, financials)
         print("After fundamentals:", len(df))
+        df = add_regime_features(df)
+        df = add_options_features(df, _OPTIONS_DATA_SOURCE)
         df = add_technical_features(df)
         print("After technical:", len(df))
         df = add_prediction_target(df, days_ahead=5)

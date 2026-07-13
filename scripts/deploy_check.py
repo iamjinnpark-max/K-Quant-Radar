@@ -16,6 +16,7 @@ REQUIRED_VALUES = {
     "STREAMLIT_SERVER_COOKIE_SECRET": 32,
     "DOMAIN": 4,
     "POSTGRES_PASSWORD": 24,
+    "AUTH_COOKIE_SECRET": 32,
 }
 PLACEHOLDER_MARKERS = {
     "replace_with_your_rotated_key",
@@ -23,12 +24,17 @@ PLACEHOLDER_MARKERS = {
     "replace_with_a_different_random_value",
     "kquant.example.com",
     "replace_with_a_long_random_database_password",
+    "replace_with_a_long_random_cookie_secret",
     "replace_with_cognito_user_pool_id",
     "replace_with_cognito_app_client_id",
     "replace_with_cognito_domain",
     "replace_with_stripe_secret_key",
     "replace_with_stripe_webhook_secret",
     "replace_with_stripe_recurring_price_id",
+    "replace_with_smtp_host",
+    "replace_with_smtp_username",
+    "replace_with_smtp_password",
+    "replace_with_mail_from_address",
 }
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{4,253}$)(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$"
@@ -86,27 +92,55 @@ def check_env_file():
             "must be different."
         )
 
-    if values.get("AUTH_MODE") == "cognito":
+    auth_mode = values.get("AUTH_MODE")
+    if auth_mode not in {"session", "cognito"}:
+        findings.append(
+            "AUTH_MODE must be session or cognito for a production deployment; "
+            "disabled is localhost-only."
+        )
+
+    allow_signup = values.get("AUTH_ALLOW_SIGNUP", "")
+    if allow_signup not in {"", "true", "false"}:
+        findings.append(
+            "AUTH_ALLOW_SIGNUP must be exactly true or false; production "
+            "treats anything except true as closed."
+        )
+
+    production_values = {}
+    if auth_mode == "session":
+        # First-party auth delivers reset/verification tokens only by email;
+        # the auth container refuses to boot in production without SMTP.
+        production_values = {
+            "SMTP_HOST": 4,
+            "MAIL_FROM": 6,
+        }
+        for name in ("SMTP_USERNAME", "SMTP_PASSWORD"):
+            value = values.get(name, "")
+            if value in PLACEHOLDER_MARKERS:
+                findings.append(
+                    f"{name} still contains an example placeholder."
+                )
+        smtp_port = values.get("SMTP_PORT", "")
+        if smtp_port and not smtp_port.isdigit():
+            findings.append("SMTP_PORT must be a port number.")
+    if auth_mode == "cognito":
         production_values = {
             "COGNITO_REGION": 4,
             "COGNITO_USER_POOL_ID": 8,
             "COGNITO_APP_CLIENT_ID": 8,
             "COGNITO_DOMAIN": 8,
-            "STRIPE_SECRET_KEY": 12,
-            "STRIPE_WEBHOOK_SECRET": 12,
-            "STRIPE_PRICE_ID": 8,
         }
-        for name, minimum_length in production_values.items():
-            value = values.get(name, "")
-            if not value:
-                findings.append(f"{name} is required when AUTH_MODE=cognito.")
-            elif value in PLACEHOLDER_MARKERS:
-                findings.append(f"{name} still contains an example placeholder.")
-            elif len(value) < minimum_length:
-                findings.append(
-                    f"{name} is too short; expected at least "
-                    f"{minimum_length} characters."
-                )
+    for name, minimum_length in production_values.items():
+        value = values.get(name, "")
+        if not value:
+            findings.append(f"{name} is required for production authentication.")
+        elif value in PLACEHOLDER_MARKERS:
+            findings.append(f"{name} still contains an example placeholder.")
+        elif len(value) < minimum_length:
+            findings.append(
+                f"{name} is too short; expected at least "
+                f"{minimum_length} characters."
+            )
 
     return values, findings
 

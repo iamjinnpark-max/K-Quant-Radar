@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class RecommendationProfile(BaseModel):
+    mode: Literal["manual", "recommendations"] = "recommendations"
     market: Literal["Korea", "US", "Global"] = "Korea"
     risk_level: Literal["Low", "Medium", "High"] = "Medium"
     style: Literal["Growth", "Value", "Dividend"] = "Growth"
@@ -25,7 +26,8 @@ class RecommendationProfile(BaseModel):
             "Energy",
         ]
     ] = Field(default_factory=list, max_length=7)
-    scan_limit: int = Field(default=30, ge=10, le=60)
+    scan_limit: int = Field(default=5, ge=1, le=60)
+    manual_tickers: list[str] = Field(default_factory=list, max_length=60)
 
 
 class JobCreated(BaseModel):

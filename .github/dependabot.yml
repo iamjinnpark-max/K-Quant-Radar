@@ -1,0 +1,47 @@
+version: 2
+updates:
+  # Streamlit / quant-engine dependencies at the repo root.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  # Platform backend (FastAPI, Celery, Stripe, SQLAlchemy) dependencies.
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  # Next.js and browser authentication dependencies.
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  # Container base images.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/backend"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # Any GitHub Actions workflows added later.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+1

@@ -20,8 +20,8 @@ COPY --chown=kquant:kquant backend/app /app/platform_api
 COPY --chown=kquant:kquant backend/alembic /app/alembic
 COPY --chown=kquant:kquant backend/alembic.ini /app/alembic.ini
 COPY --chown=kquant:kquant features.py financials.py fundamentals.py \
-    investor_flow.py model.py news_sentiment.py personalization.py \
-    screener.py stock_universe.py utils.py /app/
+    investor_flow.py model.py news_sentiment.py options_signals.py \
+    personalization.py regime.py screener.py stock_universe.py utils.py /app/
 
 RUN chmod -R a-w /app
 

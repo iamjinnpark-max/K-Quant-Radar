@@ -1,12 +1,12 @@
 FROM node:22-alpine AS dependencies
 WORKDIR /app
-COPY frontend/package.json ./
-RUN npm install
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG NEXT_PUBLIC_AUTH_MODE=disabled
+ARG NEXT_PUBLIC_AUTH_MODE=cognito
 ARG NEXT_PUBLIC_COGNITO_USER_POOL_ID
 ARG NEXT_PUBLIC_COGNITO_APP_CLIENT_ID
 ARG NEXT_PUBLIC_COGNITO_DOMAIN
