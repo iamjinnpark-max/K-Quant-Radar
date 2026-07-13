@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     cognito_region: str | None = None
     cognito_user_pool_id: str | None = None
     cognito_app_client_id: str | None = None
+    # Interactive API docs are a development tool; production keeps them off.
+    api_docs_enabled: bool = False
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
     stripe_price_id: str | None = None

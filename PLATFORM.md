@@ -107,6 +107,24 @@ The default `AUTH_MODE=session` uses the first-party auth service
    record, all recommendation jobs/results, outstanding tokens, and every
    session; audit rows are kept with the user reference nulled.
 
+### Bootstrapping your own account (session mode)
+
+Database migrations run automatically and idempotently at container start
+(Alembic for the API tables, guarded SQL for the auth tables). The permanent
+"owner" bypass exists only in Cognito mode, where it is derived from the
+`owners` group on every request. For first-party accounts, grant yourself a
+plan directly after signing up:
+
+```bash
+docker compose -f compose.platform.yaml exec postgres \
+  psql -U kquant -d kquant -c \
+  "UPDATE users SET plan = 'premium', subscription_status = 'active' \
+   WHERE email = 'you@example.com';"
+```
+
+Sign up (and verify your email) once first so the `users` row exists. Keep
+`AUTH_ALLOW_SIGNUP=false` afterwards if the platform should stay invite-only.
+
 The product tiers are enforced by the API:
 
 - **Free:** up to five stocks per scan, core metrics, and original sources;

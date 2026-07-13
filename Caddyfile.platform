@@ -1,3 +1,17 @@
+# Production reverse proxy. Caddy provisions and renews Let's Encrypt
+# certificates automatically for every site block and redirects HTTP -> HTTPS
+# by default; no extra TLS configuration is required beyond real DNS records.
+#
+# /auth and /api are deliberately served from the SAME origin as the frontend
+# (path routing, not subdomains): the session cookie is httpOnly + SameSite=Lax
+# without a Domain attribute, and CSRF uses a double-submit token, both of
+# which depend on the browser seeing one origin. Splitting auth/api onto
+# subdomains would silently weaken that model.
+
+www.{$DOMAIN} {
+    redir https://{$DOMAIN}{uri} permanent
+}
+
 {$DOMAIN} {
     encode zstd gzip
 
@@ -24,6 +38,27 @@
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://{$COGNITO_DOMAIN} wss://{$DOMAIN}; frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'"
+        -Server
+    }
+}
+
+# Streamlit research/admin interface, gated by APP_ACCESS_PASSWORD inside the
+# app itself. Runs on its own subdomain so its permissive CSP never applies
+# to the customer-facing platform.
+analytics.{$DOMAIN} {
+    encode zstd gzip
+
+    reverse_proxy analytics:8501
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        # Streamlit relies on inline/eval scripts and a websocket for reruns,
+        # so script/style stay permissive; everything else is locked to self.
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
         -Server
     }
 }

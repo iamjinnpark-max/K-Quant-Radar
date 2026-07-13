@@ -1,6 +1,15 @@
+# Bounded log retention on every service so a chatty container can never
+# fill the host disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:17-alpine
+    logging: *default-logging
     environment:
       POSTGRES_DB: kquant
       POSTGRES_USER: kquant
@@ -25,7 +34,10 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    logging: *default-logging
+    # AOF persistence: login sessions, rate-limit counters, and queued Celery
+    # jobs survive a Redis or host restart instead of logging everyone out.
+    command: ["redis-server", "--save", "", "--appendonly", "yes", "--dir", "/data"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -33,9 +45,10 @@ services:
       retries: 10
     networks: [data]
     read_only: true
+    volumes:
+      - redis_data:/data
     tmpfs:
       - /tmp:size=32m,mode=1777
-      - /data:size=64m,mode=1777
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 256m
@@ -46,6 +59,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    logging: *default-logging
     command: >
       sh -c "alembic upgrade head &&
              uvicorn platform_api.main:app --host=0.0.0.0 --port=8000"
@@ -86,6 +100,7 @@ services:
     build:
       context: .
       dockerfile: auth-server/Dockerfile
+    logging: *default-logging
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://kquant:${POSTGRES_PASSWORD}@postgres:5432/kquant
@@ -124,6 +139,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    logging: *default-logging
     command: celery -A platform_api.celery_app.celery_app worker --loglevel=INFO --concurrency=1
     environment:
       DATABASE_URL: postgresql+psycopg://kquant:${POSTGRES_PASSWORD}@postgres:5432/kquant
@@ -133,7 +149,12 @@ services:
     depends_on:
       api: { condition: service_healthy }
     healthcheck:
-      disable: true
+      # A broker round-trip proves the worker process is alive and consuming.
+      test: ["CMD-SHELL", "celery -A platform_api.celery_app.celery_app inspect ping --timeout 10 | grep -q pong"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
     read_only: true
     tmpfs:
       - /tmp:size=512m,mode=1777
@@ -156,6 +177,7 @@ services:
         NEXT_PUBLIC_COGNITO_APP_CLIENT_ID: ${COGNITO_APP_CLIENT_ID:-}
         NEXT_PUBLIC_COGNITO_DOMAIN: ${COGNITO_DOMAIN:-}
         NEXT_PUBLIC_AUTH_REDIRECT_URL: https://${DOMAIN}
+    logging: *default-logging
     expose: ["3000"]
     read_only: true
     tmpfs:
@@ -165,11 +187,39 @@ services:
     pids_limit: 128
     mem_limit: 512m
     cpus: 0.75
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks: [app]
+    restart: unless-stopped
+
+  # Streamlit research/admin interface, published at analytics.DOMAIN and
+  # gated by APP_ACCESS_PASSWORD inside the app.
+  analytics:
+    build: .
+    logging: *default-logging
+    environment:
+      DART_API_KEY: ${DART_API_KEY:?Set DART_API_KEY in .env}
+      APP_ACCESS_PASSWORD: ${APP_ACCESS_PASSWORD:?Set APP_ACCESS_PASSWORD in .env}
+      STREAMLIT_SERVER_COOKIE_SECRET: ${STREAMLIT_SERVER_COOKIE_SECRET:?Set STREAMLIT_SERVER_COOKIE_SECRET in .env}
+    expose: ["8501"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2.0
     networks: [app]
     restart: unless-stopped
 
   caddy:
     image: caddy:2-alpine
+    logging: *default-logging
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
       COGNITO_DOMAIN: ${COGNITO_DOMAIN:-auth.invalid}
@@ -184,6 +234,7 @@ services:
     depends_on:
       api: { condition: service_healthy }
       frontend: { condition: service_started }
+      analytics: { condition: service_started }
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -203,5 +254,6 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
   caddy_data:
   caddy_config:
